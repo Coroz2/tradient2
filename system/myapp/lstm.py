@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import yfinance as yf
+import os
+os.makedirs('models', exist_ok=True)
 # import neptune.new as neptune
 import neptune
 from sklearn.preprocessing import StandardScaler
@@ -13,11 +15,12 @@ from tensorflow.keras.models import Model
 
 
 # Collecting the data using yfinance
-ticker_symbol = "AAPL"
+ticker_symbol = "PLTR"
 ticker = yf.Ticker(ticker_symbol)
 historical_data = ticker.history(period="2y")  # Using 2 years of data for better results
 print("Historical Data:")
 print(historical_data.head())
+
 
 # Prepare the data
 stockprices = historical_data[['Close']].copy()
@@ -216,6 +219,12 @@ def plot_stock_trend_lstm(train, test, run):
     run["Plot of Stock Predictions"].upload(neptune.types.File.as_image(fig))
 
 plot_stock_trend_lstm(train, test, run)
+
+
+model_save_path = f'system/ml/models/lstm_{ticker_symbol}.h5'
+model.save(model_save_path)
+print(f"Model saved locally to: {model_save_path}")
+run['model/checkpoints'].upload(model_save_path)
 
 # Stop the Neptune run
 run.stop()
