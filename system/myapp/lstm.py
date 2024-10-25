@@ -221,8 +221,8 @@ def plot_stock_trend_lstm(train, test, run):
 plot_stock_trend_lstm(train, test, run)
 
 
-model_save_path = f'system/ml/models/lstm_{ticker_symbol}.h5'
-model.save(model_save_path)
+model_save_path = f'system/ml/models/lstm_{ticker_symbol}.keras'
+tf.keras.models.save_model(model, model_save_path)
 print(f"Model saved locally to: {model_save_path}")
 run['model/checkpoints'].upload(model_save_path)
 
