@@ -265,8 +265,6 @@ predictor = StockPredictor(
     batch_size=20
 )
 
-
-
 # Run the full prediction pipeline
 predictor.fetch_data()
 X_train, y_train = predictor.prepare_data()
