@@ -78,11 +78,24 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'postgres',
+        'USER': 'postgres.qlrwrvfvpkykpcmikvdo',
+        'PASSWORD': 'DylansDB71!71!',
+        'HOST': 'aws-0-us-east-2.pooler.supabase.com',
+        'PORT': '6543',
+        'OPTIONS': {
+            'sslmode': 'require',
+            'sslcert': None,
+            'sslkey': None,
+            'sslrootcert': None,
+        },
     }
 }
+
+SUPABASE_URL = 'https://qlrwrvfvpkykpcmikvdo.supabase.co'
+SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFscndydmZ2cGt5a3BjbWlrdmRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzAxNzAwNjQsImV4cCI6MjA0NTc0NjA2NH0.K31NQ0nDXA4hWS5rwI5LgVHh7tFFJWhZuQHktyDfYJg'
 
 
 # Password validation

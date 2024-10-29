@@ -11,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
 from tensorflow.keras.layers import LSTM, Dense, Input
 from tensorflow.keras.models import Model
-# from neptune.integrations.tensorflow import NeptuneCallback
+from supabase_client import save_predictions_to_supabase
 
 class StockPredictor:
     def __init__(self, 
@@ -192,6 +192,10 @@ class StockPredictor:
         model_save_path = os.path.join(save_dir, f'lstm_{self.ticker_symbol}.h5')
         self.model.save(model_save_path)
         self.run['system/ml/models'].upload(model_save_path)
+
+        # Save predictions to Supabase
+        save_predictions_to_supabase(test, predicted_price, ticker_symbol)
+        print("Saved predictsion to supabase")
         return model_save_path
 
     # Helper methods (private)
