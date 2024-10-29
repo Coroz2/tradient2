@@ -27,6 +27,7 @@ interface PredictionData {
   actual_price: number;
   predicted_price: number;
   ticker: string;
+  data_type: string;
 }
 
 export default function StockPredictionChart() {
@@ -78,8 +79,20 @@ export default function StockPredictionChart() {
     labels: predictionData.map(d => formatDate(d.date)),
     datasets: [
       {
+        label: 'Historical Price',
+        data: predictionData.map(d => d.data_type === 'train' ? d.actual_price : null),
+        borderColor: '#10B981',
+        backgroundColor: 'rgba(16, 185, 129, 0.05)',
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        pointRadius: 0,
+        pointHoverRadius: 8,
+        spanGaps: false
+      },
+      {
         label: 'Actual Price',
-        data: predictionData.map(d => d.actual_price),
+        data: predictionData.map(d => d.data_type === 'test' ? d.actual_price : null),
         borderColor: '#6366f1',
         backgroundColor: 'rgba(99, 102, 241, 0.05)',
         borderWidth: 2,
@@ -87,18 +100,11 @@ export default function StockPredictionChart() {
         fill: true,
         pointRadius: 0,
         pointHoverRadius: 8,
-        pointBackgroundColor: '#ffffff',
-        pointHoverBackgroundColor: '#ffffff',
-        pointBorderColor: '#6366f1',
-        pointHoverBorderColor: '#6366f1',
-        pointBorderWidth: 2,
-        pointHoverBorderWidth: 2,
-        pointStyle: 'circle',
-        hitRadius: 8,
+        spanGaps: false
       },
       {
         label: 'Predicted Price',
-        data: predictionData.map(d => d.predicted_price),
+        data: predictionData.map(d => d.data_type === 'test' ? d.predicted_price : null),
         borderColor: '#f43f5e',
         backgroundColor: 'rgba(244, 63, 94, 0.05)',
         borderWidth: 2,
@@ -106,14 +112,7 @@ export default function StockPredictionChart() {
         fill: true,
         pointRadius: 0,
         pointHoverRadius: 8,
-        pointBackgroundColor: '#ffffff',
-        pointHoverBackgroundColor: '#ffffff',
-        pointBorderColor: '#f43f5e',
-        pointHoverBorderColor: '#f43f5e',
-        pointBorderWidth: 2,
-        pointHoverBorderWidth: 2,
-        pointStyle: 'circle',
-        hitRadius: 8,
+        spanGaps: false
       }
     ]
   };

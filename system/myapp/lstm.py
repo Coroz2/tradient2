@@ -193,9 +193,14 @@ class StockPredictor:
         self.model.save(model_save_path)
         self.run['system/ml/models'].upload(model_save_path)
 
-        # Save predictions to Supabase
-        save_predictions_to_supabase(test, predicted_price, ticker_symbol)
-        print("Saved predictsion to supabase")
+        # Save both training and test data to Supabase
+        save_predictions_to_supabase(
+            self.train, 
+            self.test, 
+            self.test["Predictions_lstm"], 
+            self.ticker_symbol
+        )
+        print("Saved predictions to supabase")
         return model_save_path
 
     # Helper methods (private)
