@@ -13,6 +13,9 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 import sys
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,7 +26,7 @@ sys.path.append(str(BASE_DIR.parent))
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-rwtm7brkpg(b!&d1y3-a!5m9arn9&ik)nhv-3s##gdy9*ywtm4"
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -80,11 +83,11 @@ WSGI_APPLICATION = "backend.wsgi.application"
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'postgres',
-        'USER': 'postgres.qlrwrvfvpkykpcmikvdo',
-        'PASSWORD': 'DylansDB71!71!',
-        'HOST': 'aws-0-us-east-2.pooler.supabase.com',
-        'PORT': '6543',
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
         'OPTIONS': {
             'sslmode': 'require',
             'sslcert': None,
@@ -94,8 +97,8 @@ DATABASES = {
     }
 }
 
-SUPABASE_URL = 'https://qlrwrvfvpkykpcmikvdo.supabase.co'
-SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFscndydmZ2cGt5a3BjbWlrdmRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzAxNzAwNjQsImV4cCI6MjA0NTc0NjA2NH0.K31NQ0nDXA4hWS5rwI5LgVHh7tFFJWhZuQHktyDfYJg'
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
 
 # Password validation

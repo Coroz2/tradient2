@@ -12,6 +12,9 @@ import tensorflow as tf
 from tensorflow.keras.layers import LSTM, Dense, Input
 from tensorflow.keras.models import Model
 from supabase_client import save_predictions_to_supabase
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class StockPredictor:
     def __init__(self, 
@@ -262,8 +265,8 @@ class StockPredictor:
 # Example usage
 predictor = StockPredictor(
     ticker_symbol="PLTR",
-    neptune_project="dylanad2/CS222",
-    neptune_api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiIxY2EzZGZhZS1mMjNlLTQzMGYtOWI3NC1jMTE5OTQzYmQzZTAifQ==",
+    neptune_project=os.getenv('NEPTUNE_PROJECT'),
+    neptune_api_token=os.getenv('NEPTUNE_API_TOKEN'),
     run_name="PLTR_class_based_test_run", 
     historical_period="2y",
     test_ratio=0.2,

@@ -1,7 +1,19 @@
 from supabase import create_client
 from django.conf import settings
+import os
+from dotenv import load_dotenv
 
-supabase = create_client("https://qlrwrvfvpkykpcmikvdo.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFscndydmZ2cGt5a3BjbWlrdmRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzAxNzAwNjQsImV4cCI6MjA0NTc0NjA2NH0.K31NQ0nDXA4hWS5rwI5LgVHh7tFFJWhZuQHktyDfYJg")
+# Load environment variables
+load_dotenv()
+
+# Get Supabase credentials from environment variables
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Supabase credentials not found in environment variables")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def save_predictions_to_supabase(train_data, test_data, predicted_prices, ticker_symbol):
     predictions = []
