@@ -1,0 +1,16 @@
+Reading company data from CSV...
+
+Total number of tickers: 6368
+
+Tickers by exchange:
+New York Stock Exchange: 2467
+Nasdaq Global Select: 1432
+NASDAQ Capital Market: 793
+NYSE Arca: 745
+NASDAQ Global Market: 621
+NYSE American: 273
+Cboe Global Markets EDGX: 35
+Investors Exchange: 1
+OTC Pink: 1
+
+Data analysis complete!

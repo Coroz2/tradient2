@@ -30,17 +30,29 @@ interface PredictionData {
   data_type: string;
 }
 
-export default function StockPredictionChart() {
+interface StockPredictionChartProps {
+  selectedTicker: string;
+  refreshTrigger: number;
+}
+
+export default function StockPredictionChart({ selectedTicker, refreshTrigger }: StockPredictionChartProps) {
   const [predictionData, setPredictionData] = useState<PredictionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPredictions = async () => {
+      if (!selectedTicker) {
+        setPredictionData([]);
+        setLoading(false);
+        return;
+      }
+
       try {
         const { data, error: supabaseError } = await supabase
           .from('stock_predictions')
           .select('*')
+          .eq('ticker', selectedTicker)
           .order('date', { ascending: true });
 
         if (supabaseError) throw supabaseError;
@@ -52,8 +64,9 @@ export default function StockPredictionChart() {
       }
     };
 
+    setLoading(true);
     fetchPredictions();
-  }, []);
+  }, [selectedTicker, refreshTrigger]);
 
   if (loading) return (
     <div className="flex justify-center items-center h-64">

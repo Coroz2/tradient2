@@ -11,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
 from tensorflow.keras.layers import LSTM, Dense, Input
 from tensorflow.keras.models import Model
-from supabase_client import save_predictions_to_supabase
+from .supabase_client import save_predictions_to_supabase
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -263,28 +263,28 @@ class StockPredictor:
         return fig
 
 # Example usage
-predictor = StockPredictor(
-    ticker_symbol="PLTR",
-    neptune_project=os.getenv('NEPTUNE_PROJECT'),
-    neptune_api_token=os.getenv('NEPTUNE_API_TOKEN'),
-    run_name="PLTR_class_based_test_run", 
-    historical_period="2y",
-    test_ratio=0.2,
-    window_size=50,
-    lstm_units=50,
-    optimizer="adam",
-    epochs=15,
-    batch_size=20
-)
+# predictor = StockPredictor(
+#     ticker_symbol="PLTR",
+#     neptune_project=os.getenv('NEPTUNE_PROJECT'),
+#     neptune_api_token=os.getenv('NEPTUNE_API_TOKEN'),
+#     run_name="PLTR_class_based_test_run", 
+#     historical_period="2y",
+#     test_ratio=0.2,
+#     window_size=50,
+#     lstm_units=50,
+#     optimizer="adam",
+#     epochs=15,
+#     batch_size=20
+# )
 
-# Run the full prediction pipeline
-predictor.fetch_data()
-X_train, y_train = predictor.prepare_data()
-predictor.initialize_neptune()
-predictor.build_model(X_train.shape)
-predictor.train_model(X_train, y_train)
-predictions = predictor.make_predictions()
-rmse, mape = predictor.evaluate_model()
-predictor.plot_predictions()
-model_path = predictor.save_model()
-predictor.run.stop()
+# # Run the full prediction pipeline
+# predictor.fetch_data()
+# X_train, y_train = predictor.prepare_data()
+# predictor.initialize_neptune()
+# predictor.build_model(X_train.shape)
+# predictor.train_model(X_train, y_train)
+# predictions = predictor.make_predictions()
+# rmse, mape = predictor.evaluate_model()
+# predictor.plot_predictions()
+# model_path = predictor.save_model()
+# predictor.run.stop()
