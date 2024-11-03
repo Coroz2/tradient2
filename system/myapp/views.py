@@ -41,12 +41,11 @@ def train_model(request):
         # Run prediction pipeline
         predictor.fetch_data()
         X_train, y_train = predictor.prepare_data()
-        predictor.initialize_neptune()
+        predictor.initialize_neptune(["POST"])
         predictor.build_model(X_train.shape)
         predictor.train_model(X_train, y_train)
         predictions = predictor.make_predictions()
         rmse, mape = predictor.evaluate_model()
-        # predictor.plot_predictions()
         model_path = predictor.save_model()
         predictor.run.stop()
         

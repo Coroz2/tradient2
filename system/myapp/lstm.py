@@ -96,15 +96,18 @@ class StockPredictor:
         
         return X_train, y_train
 
-    def initialize_neptune(self):
+    def initialize_neptune(self, groupTags):
         """Initialize Neptune.ai run"""
+        tags = ['LSTM']
         self.run = neptune.init_run(
             project=self.neptune_project,
             api_token=self.neptune_api_token,
             name=self.run_name,
             description='stock-prediction-machine-learning',
-            tags=['stockprediction', 'LSTM', 'neptune']
+            tags=tags
+            
         )
+        self.run["sys/group_tags"].add(groupTags)
         
         # Log hyperparameters
         self.run["LSTM_args"] = {

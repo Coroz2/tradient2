@@ -19,7 +19,10 @@ function Landing() {
 
   useEffect(() => {
     axios.get(`${process.env.REACT_APP_API_URL}/api/available-tickers/`)
-      .then(response => setTickers(response.data))
+    .then(response => {
+      setTickers(response.data);
+      // console.log('Loaded tickers:', response.data);
+    })
       .catch(err => setError('Failed to load tickers'));
   }, []);
 
