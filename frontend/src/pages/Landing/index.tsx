@@ -2,6 +2,8 @@ import React from 'react';
 import StockPredictionChart from '../../components/StockPredictionChart';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { supabase } from '../../utils/supabaseClient';
+import { useAuth } from '../../utils/AuthContext';
 
 interface Ticker {
   ticker: string;
@@ -16,6 +18,7 @@ function Landing() {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string>('');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const { user, profile } = useAuth();
 
   useEffect(() => {
     axios.get(`${process.env.REACT_APP_API_URL}/api/available-tickers/`)
@@ -24,6 +27,10 @@ function Landing() {
       // console.log('Loaded tickers:', response.data);
     })
       .catch(err => setError('Failed to load tickers'));
+
+    return () => {
+      // No need to unsubscribe from auth changes as it's handled by AuthContext
+    };
   }, []);
 
   const handleTrainModel = async () => {
@@ -46,28 +53,91 @@ function Landing() {
     }
   };
 
+  const handleSignInWithGoogle = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}`,
+        }
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error signing in with Google:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600">
       <div className="container mx-auto px-4 py-8">
-        {/* First white box with title and Get Started button */}
-        <div className="w-full bg-white rounded-xl shadow-lg overflow-hidden mb-8">
-          <div className="p-8">
-            <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold">
-              Welcome to
-            </div>
-            <h1 className="block mt-1 text-3xl leading-tight font-bold text-black">
-              Stock Prediction App
-            </h1>
-            <p className="mt-2 text-slate-500">
-              A modern application for predicting stock market trends using advanced analytics
-            </p>
-            <div className="mt-6">
-              <button className="bg-indigo-500 text-white font-semibold py-2 px-4 rounded hover:bg-indigo-600 transition duration-300">
-                Get Started
+        {/* User Profile Section */}
+        {user ? (
+          <div className="w-full bg-white rounded-xl shadow-lg overflow-hidden mb-8">
+            <div className="p-8 flex items-center gap-4">
+              {profile?.avatar_url && (
+                <img 
+                  src={profile.avatar_url} 
+                  alt="Profile" 
+                  className="w-12 h-12 rounded-full"
+                />
+              )}
+              <div>
+                <h2 className="text-xl font-semibold">{profile?.full_name}</h2>
+                <p className="text-gray-600">{profile?.email}</p>
+              </div>
+              <button 
+                onClick={() => supabase.auth.signOut()}
+                className="ml-auto bg-indigo-500 text-white font-semibold py-2 px-4 rounded hover:bg-indigo-600 transition duration-300 flex items-center gap-2"
+              >
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="h-4 w-4" 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" 
+                  />
+                </svg>
+                Sign Out
               </button>
             </div>
           </div>
-        </div>
+        ) : (
+          /* Your existing sign-in button section */
+          <div className="w-full bg-white rounded-xl shadow-lg overflow-hidden mb-8">
+            <div className="p-8">
+              <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold">
+                Welcome to
+              </div>
+              <h1 className="block mt-1 text-3xl leading-tight font-bold text-black">
+                Stock Prediction App
+              </h1>
+              <p className="mt-2 text-slate-500">
+                A modern application for predicting stock market trends using advanced analytics
+              </p>
+              <div className="mt-6">
+              {/* <button className="bg-indigo-500 text-white font-semibold py-2 px-4 rounded hover:bg-indigo-600 transition duration-300">
+              Get Started */}
+                <button 
+                  onClick={handleSignInWithGoogle}
+                  className="bg-indigo-500 text-white font-semibold py-2 px-4 rounded hover:bg-indigo-600 transition duration-300 flex items-center gap-2"
+                >
+                  <img 
+                    src="https://www.google.com/favicon.ico" 
+                    alt="Google" 
+                    className="w-4 h-4"
+                  />
+                  Sign in with Google
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Second white box with ticker selector and chart */}
         <div className="w-full bg-white rounded-xl shadow-lg overflow-hidden">
