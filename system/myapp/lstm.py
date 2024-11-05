@@ -73,22 +73,42 @@ class StockPredictor:
         """Fetch historical stock data"""
         ticker = yf.Ticker(self.ticker_symbol)
         historical_data = ticker.history(period=self.historical_period)
+        
+        # Fill NaN values with the mean of or just Drop
+        #  historical_data = historical_data.dropna()
+        historical_data = historical_data.fillna(method='ffill').fillna(method='bfill')
+        
         self.stockprices = historical_data[['Close']].copy()
         self.stockprices.index = pd.to_datetime(self.stockprices.index)
+        
+        # Verify we have enough data
+        if len(self.stockprices) < self.window_size * 2:
+            raise ValueError(f"Insufficient data for {self.ticker_symbol}. Need at least {self.window_size * 2} days of data.")
+        
         return self.stockprices
 
     def prepare_data(self):
         """Prepare and split the data into training and testing sets"""
+        if self.stockprices is None or len(self.stockprices) == 0:
+            raise ValueError("No stock data available. Please fetch data first.")
+            
         train_size = int((1 - self.test_ratio) * len(self.stockprices))
+        if train_size < self.window_size:
+            raise ValueError(f"Insufficient training data. Need at least {self.window_size} samples.")
+            
         self.train = self.stockprices[:train_size][['Close']]
         self.test = self.stockprices[train_size:][['Close']]
         
         # Scale the data
         self.scaler = StandardScaler()
         scaled_data = self.scaler.fit_transform(self.stockprices[["Close"]])
+        
+        # Add small epsilon to prevent division by zero in MAPE calculation
+        epsilon = 1e-10
+        scaled_data = np.clip(scaled_data, epsilon, None)
+        
         scaled_data_train = scaled_data[:train_size]
         
-        # Prepare sequences
         X_train, y_train = self._extract_seqX_outcomeY(scaled_data_train, 
                                                       self.window_size, 
                                                       self.window_size)
