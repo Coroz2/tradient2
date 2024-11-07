@@ -13,8 +13,24 @@ from tensorflow.keras.layers import LSTM, Dense, Input
 from tensorflow.keras.models import Model
 from .supabase_client import save_predictions_to_supabase
 from dotenv import load_dotenv
+from .overfitting_detector import OverfittingDetector
+import time
 
 load_dotenv()
+
+class TimeoutCallback(tf.keras.callbacks.Callback):
+    def __init__(self, seconds):
+        super().__init__()
+        self.seconds = seconds
+        self.start_time = None
+    
+    def on_train_begin(self, logs=None):
+        self.start_time = time.time()
+    
+    def on_epoch_end(self, epoch, logs=None):
+        if time.time() - self.start_time > self.seconds:
+            self.model.stop_training = True
+            print(f"\nTimeout reached after {self.seconds} seconds")
 
 class StockPredictor:
     def __init__(self, 
@@ -71,21 +87,32 @@ class StockPredictor:
 
     def fetch_data(self):
         """Fetch historical stock data"""
-        ticker = yf.Ticker(self.ticker_symbol)
-        historical_data = ticker.history(period=self.historical_period)
+        try:
+            ticker = yf.Ticker(self.ticker_symbol)
+            historical_data = ticker.history(period=self.historical_period)
+            
+            if historical_data.empty:
+                raise ValueError(f"No data found for {self.ticker_symbol}. The stock might be delisted.")
+            
+            # Replace deprecated fillna method
+            historical_data = historical_data.ffill().bfill()
+            
+            self.stockprices = historical_data[['Close']].copy()
+            self.stockprices.index = pd.to_datetime(self.stockprices.index)
+            
+            # Verify we have enough data
+            if len(self.stockprices) < self.window_size * 2:
+                raise ValueError(
+                    f"Insufficient data for {self.ticker_symbol}. "
+                    f"Found only {len(self.stockprices)} days of data, but need at least {self.window_size * 2} days."
+                )
+            
+            return self.stockprices
         
-        # Fill NaN values with the mean of or just Drop
-        #  historical_data = historical_data.dropna()
-        historical_data = historical_data.fillna(method='ffill').fillna(method='bfill')
-        
-        self.stockprices = historical_data[['Close']].copy()
-        self.stockprices.index = pd.to_datetime(self.stockprices.index)
-        
-        # Verify we have enough data
-        if len(self.stockprices) < self.window_size * 2:
-            raise ValueError(f"Insufficient data for {self.ticker_symbol}. Need at least {self.window_size * 2} days of data.")
-        
-        return self.stockprices
+        except Exception as e:
+            if "No data found" in str(e):
+                raise ValueError(f"Stock {self.ticker_symbol} appears to be delisted or invalid.")
+            raise
 
     def prepare_data(self):
         """Prepare and split the data into training and testing sets"""
@@ -148,7 +175,9 @@ class StockPredictor:
         # Build the model
         inp = Input(shape=(input_shape[1], 1))
         x = LSTM(units=self.lstm_units, return_sequences=True)(inp)
+        x = tf.keras.layers.Dropout(0.2)(x)
         x = LSTM(units=self.lstm_units)(x)
+        x = tf.keras.layers.Dropout(0.2)(x)
         out = Dense(1, activation="linear")(x)
         self.model = Model(inp, out)
         self.model.compile(loss="mean_squared_error", optimizer=self.optimizer)
@@ -156,38 +185,78 @@ class StockPredictor:
 
     def train_model(self, X_train, y_train):
         """Train the LSTM model"""
-        # Add callbacks for training
         callbacks = [
             tf.keras.callbacks.EarlyStopping(
                 monitor='val_loss',
-                patience=5,
-                restore_best_weights=True
+                patience=3,
+                restore_best_weights=True,
+                min_delta=0.01
             ),
             tf.keras.callbacks.ReduceLROnPlateau(
                 monitor='val_loss',
-                factor=0.2,
-                patience=3,
-                min_lr=0.0001
-            )
+                factor=0.5,
+                patience=2,
+                min_lr=0.0001,
+                min_delta=0.01
+            ),
+            TimeoutCallback(seconds=300)
         ]
         
-        # Train the model and log metrics manually
-        history = self.model.fit(
-            X_train, y_train,
-            epochs=self.epochs,
-            batch_size=self.batch_size,
-            verbose=1,
-            validation_split=0.1,
-            shuffle=True,
-            callbacks=callbacks
-        )
+        # Split data into train and validation sets
+        val_split = 0.15
+        split_idx = int(len(X_train) * (1 - val_split))
+        X_train_split = X_train[:split_idx]
+        y_train_split = y_train[:split_idx]
+        X_val = X_train[split_idx:]
+        y_val = y_train[split_idx:]
         
-        # Log training history to Neptune
-        for epoch in range(len(history.history['loss'])):
-            self.run["metrics/epoch/loss"].log(history.history['loss'][epoch])
-            self.run["metrics/epoch/val_loss"].log(history.history['val_loss'][epoch])
-        
-        return history
+        try:
+            # Train the model with simplified parameters
+            history = self.model.fit(
+                X_train_split, y_train_split,
+                epochs=self.epochs,
+                batch_size=self.batch_size,
+                verbose=1,
+                validation_data=(X_val, y_val),
+                shuffle=True,
+                callbacks=callbacks
+            )
+            
+            # Create and use the OverfittingDetector
+            try:
+                detector = OverfittingDetector(
+                    history=history,
+                    model=self.model,
+                    X_train=X_train_split,
+                    y_train=y_train_split,
+                    X_val=X_val,
+                    y_val=y_val,
+                    neptune_run=self.run
+                )
+                
+                is_overfit, metrics = detector.analyze_overfitting(threshold=0.1)
+                
+                # Enhanced logging of results
+                print("\n=== Overfitting Analysis Results ===")
+                print(f"Is model overfitting? {'Yes' if is_overfit else 'No'}")
+                print("\nMetrics:")
+                for metric_name, value in metrics.items():
+                    print(f"{metric_name}: {value:.4f}")
+                
+                # Log training history to Neptune
+                for epoch in range(len(history.history['loss'])):
+                    self.run["metrics/epoch/loss"].log(history.history['loss'][epoch])
+                    self.run["metrics/epoch/val_loss"].log(history.history['val_loss'][epoch])
+                    
+            except Exception as e:
+                print(f"\nOverfitting analysis error: {str(e)}")
+                print("Training completed but overfitting analysis failed.")
+            
+            return history
+            
+        except Exception as e:
+            print(f"Training interrupted: {str(e)}")
+            raise
 
     def make_predictions(self):
         """Make predictions on the test set"""

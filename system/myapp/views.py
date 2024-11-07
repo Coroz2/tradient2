@@ -6,6 +6,9 @@ import pandas as pd
 from .lstm import StockPredictor
 from dotenv import load_dotenv
 from pathlib import Path
+import traceback
+import logging
+from rest_framework import status
 
 load_dotenv()
 
@@ -28,7 +31,10 @@ def train_model(request):
     """Train LSTM model for selected ticker"""
     ticker = request.data.get('ticker')
     if not ticker:
-        return Response({'error': 'Ticker is required'}, status=400)
+        return Response(
+            {'error': 'Ticker symbol is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
     
     try:
         predictor = StockPredictor(
@@ -38,8 +44,16 @@ def train_model(request):
             run_name=f"{ticker}_prediction"
         )
         
-        # Run prediction pipeline
-        predictor.fetch_data()
+        try:
+            predictor.fetch_data()
+        except ValueError as e:
+            return Response({
+                'status': 'error',
+                'message': str(e),
+                'error_type': 'data_fetch_error'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Continue with the rest of the pipeline
         X_train, y_train = predictor.prepare_data()
         predictor.initialize_neptune(["POST"])
         predictor.build_model(X_train.shape)
@@ -57,7 +71,9 @@ def train_model(request):
         })
         
     except Exception as e:
+        logging.error(f"Error training model: {traceback.format_exc()}")
         return Response({
             'status': 'error',
-            'message': str(e)
-        }, status=500)
+            'message': str(e),
+            'error_type': 'training_error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
