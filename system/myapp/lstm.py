@@ -370,7 +370,8 @@ class StockPredictor:
         predicted_price = self.scaler.inverse_transform(dummy)[:, 0]  # Take only the Close price column
         
         # Ensure we're only using available test data
-        current_date = pd.Timestamp.now()
+        current_date = pd.Timestamp.now()  # timezone-naive
+        self.test.index = self.test.index.tz_localize(None)  # Remove timezone information
         self.test = self.test[self.test.index <= current_date]
         self.test["Predictions_lstm"] = predicted_price[:len(self.test)]
         
