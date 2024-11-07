@@ -11,6 +11,7 @@ import {
   Legend
 } from 'chart.js';
 import { supabase } from '../utils/supabaseClient';
+import { Console } from 'console';
 
 ChartJS.register(
   CategoryScale,
@@ -47,16 +48,19 @@ export default function StockPredictionChart({ selectedTicker, refreshTrigger }:
         setLoading(false);
         return;
       }
+      
 
       try {
         const { data, error: supabaseError } = await supabase
           .from('stock_predictions')
           .select('*')
           .eq('ticker', selectedTicker)
-          .order('date', { ascending: true });
+          .order('date', {ascending: false})
+          .limit(1000);
 
         if (supabaseError) throw supabaseError;
-        setPredictionData(data || []);
+        const chronologicalData = (data || []).reverse();
+        setPredictionData(chronologicalData || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch data');
       } finally {
