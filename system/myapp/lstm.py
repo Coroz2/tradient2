@@ -119,27 +119,40 @@ class StockPredictor:
         if self.stockprices is None or len(self.stockprices) == 0:
             raise ValueError("No stock data available. Please fetch data first.")
             
+        # Calculate technical indicators
+        feature_columns = ['Close', 'MA20', 'MA50', 'RSI', 'MACD', 'Price_Change', 'Price_Change_MA5']
+        
+        # Calculate all indicators
+        self.stockprices['MA20'] = self.stockprices['Close'].rolling(window=20).mean()
+        self.stockprices['MA50'] = self.stockprices['Close'].rolling(window=50).mean()
+        self.stockprices['RSI'] = self._calculate_rsi(self.stockprices['Close'])
+        self.stockprices['MACD'] = self._calculate_macd(self.stockprices['Close'])
+        self.stockprices['Price_Change'] = self.stockprices['Close'].pct_change()
+        self.stockprices['Price_Change_MA5'] = self.stockprices['Price_Change'].rolling(window=5).mean()
+        
+        # Forward fill and standardize all features
+        self.stockprices[feature_columns] = self.stockprices[feature_columns].fillna(method='ffill').fillna(0)
+        
+        # Split data
         train_size = int((1 - self.test_ratio) * len(self.stockprices))
-        if train_size < self.window_size:
-            raise ValueError(f"Insufficient training data. Need at least {self.window_size} samples.")
-            
+        
+        # Scale features
+        self.scaler = StandardScaler()
+        scaled_data = self.scaler.fit_transform(self.stockprices[feature_columns])
+        
+        # Prepare training data with all features
+        scaled_data_train = scaled_data[:train_size]
+        X_train, y_train = [], []
+        
+        for i in range(self.window_size, len(scaled_data_train)):
+            X_train.append(scaled_data_train[i-self.window_size:i])
+            y_train.append(scaled_data_train[i, 0])  # Only predict Close price
+        
+        X_train = np.array(X_train)
+        y_train = np.array(y_train)
+        
         self.train = self.stockprices[:train_size][['Close']]
         self.test = self.stockprices[train_size:][['Close']]
-        
-        # Scale the data
-        self.scaler = StandardScaler()
-        scaled_data = self.scaler.fit_transform(self.stockprices[["Close"]])
-        
-        # Add small epsilon to prevent division by zero in MAPE calculation
-        epsilon = 1e-10
-        scaled_data = np.clip(scaled_data, epsilon, None)
-        
-        scaled_data_train = scaled_data[:train_size]
-        
-        X_train, y_train = self._extract_seqX_outcomeY(scaled_data_train, 
-                                                      self.window_size, 
-                                                      self.window_size)
-        X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
         
         return X_train, y_train
 
@@ -166,21 +179,42 @@ class StockPredictor:
         }
 
     def build_model(self, input_shape):
-        """Build and compile the LSTM model"""
-        # Clear any existing model first
+        """Build and compile the LSTM model with regularization"""
         if self.model is not None:
             del self.model
             tf.keras.backend.clear_session()
         
-        # Build the model
-        inp = Input(shape=(input_shape[1], 1))
-        x = LSTM(units=self.lstm_units, return_sequences=True)(inp)
-        x = tf.keras.layers.Dropout(0.2)(x)
-        x = LSTM(units=self.lstm_units)(x)
+        # Build the model with regularization
+        inp = Input(shape=(input_shape[1], input_shape[2]))  # Changed to handle multiple features
+        
+        # First LSTM layer
+        x = LSTM(units=self.lstm_units, 
+                 return_sequences=True,
+                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(inp)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        
+        # Second LSTM layer
+        x = LSTM(units=self.lstm_units//2,
+                 return_sequences=True,
+                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        
+        # Third LSTM layer
+        x = LSTM(units=self.lstm_units//4,
+                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        
+        # Dense layers
+        x = Dense(64, activation='relu')(x)
         x = tf.keras.layers.Dropout(0.2)(x)
         out = Dense(1, activation="linear")(x)
+        
         self.model = Model(inp, out)
-        self.model.compile(loss="mean_squared_error", optimizer=self.optimizer)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+        self.model.compile(loss="huber", optimizer=optimizer)
         return self.model
 
     def train_model(self, X_train, y_train):
@@ -188,18 +222,18 @@ class StockPredictor:
         callbacks = [
             tf.keras.callbacks.EarlyStopping(
                 monitor='val_loss',
-                patience=3,
+                patience=10,
                 restore_best_weights=True,
-                min_delta=0.01
+                min_delta=0.0001
             ),
             tf.keras.callbacks.ReduceLROnPlateau(
                 monitor='val_loss',
-                factor=0.5,
-                patience=2,
-                min_lr=0.0001,
-                min_delta=0.01
+                factor=0.2,
+                patience=5,
+                min_lr=0.00001,
+                min_delta=0.0001
             ),
-            TimeoutCallback(seconds=300)
+            TimeoutCallback(seconds=600)
         ]
         
         # Split data into train and validation sets
@@ -262,8 +296,20 @@ class StockPredictor:
         """Make predictions on the test set"""
         X_test = self._preprocess_testdat()
         predicted_price_ = self.model.predict(X_test)
-        predicted_price = self.scaler.inverse_transform(predicted_price_)
-        self.test["Predictions_lstm"] = predicted_price
+        
+        # Create a dummy array with same shape as training data
+        dummy = np.zeros((predicted_price_.shape[0], 7))  # 7 is number of features
+        dummy[:, 0] = predicted_price_.flatten()  # Put predictions in first column (Close price)
+        
+        # Inverse transform
+        predicted_price = self.scaler.inverse_transform(dummy)[:, 0]  # Take only the Close price column
+        
+        # Ensure we're only using available test data
+        current_date = pd.Timestamp.now()
+        self.test = self.test[self.test.index <= current_date]
+        self.test["Predictions_lstm"] = predicted_price[:len(self.test)]
+        
+        print(f"Debug: Test data date range: {self.test.index[0]} to {self.test.index[-1]}")
         return self.test
 
     def evaluate_model(self):
@@ -282,17 +328,36 @@ class StockPredictor:
         return rmse, mape
 
     def save_model(self, save_dir='models'):
-        """Save the trained model"""
+        """Save the trained model and predictions"""
         os.makedirs(save_dir, exist_ok=True)
         model_save_path = os.path.join(save_dir, f'lstm_{self.ticker_symbol}.h5')
         self.model.save(model_save_path)
         self.run['system/ml/models'].upload(model_save_path)
 
+        # Debug logging
+        print("\nDEBUG: Verification of predictions")
+        print("Test Data Shape:", self.test.shape)
+        print("\nSample of Test Data and Predictions:")
+        debug_df = pd.DataFrame({
+            'Date': self.test.index[-5:],  # Last 5 dates
+            'Actual': self.test['Close'][-5:],
+            'Predicted': self.test['Predictions_lstm'][-5:],
+            'Difference': self.test['Close'][-5:] - self.test['Predictions_lstm'][-5:]
+        })
+        print(debug_df.to_string())
+        
+        # Prepare data for saving
+        predictions_df = pd.DataFrame({
+            'Date': self.test.index,
+            'Close': self.test['Close'],
+            'Predictions_lstm': self.test['Predictions_lstm']
+        })
+        
         # Save both training and test data to Supabase
         save_predictions_to_supabase(
             self.train, 
-            self.test, 
-            self.test["Predictions_lstm"], 
+            predictions_df,
+            predictions_df['Predictions_lstm'],
             self.ticker_symbol
         )
         print("Saved predictions to supabase")
@@ -331,28 +396,61 @@ class StockPredictor:
         return mape
 
     def _preprocess_testdat(self):
-        raw = self.stockprices["Close"][len(self.stockprices) - len(self.test) - self.window_size:].values
-        raw = raw.reshape(-1,1)
+        """Preprocess test data with all features"""
+        feature_columns = ['Close', 'MA20', 'MA50', 'RSI', 'MACD', 'Price_Change', 'Price_Change_MA5']
+        raw = self.stockprices[feature_columns][len(self.stockprices) - len(self.test) - self.window_size:].values
         raw = self.scaler.transform(raw)
-
-        X_test = [raw[i-self.window_size:i, 0] for i in range(self.window_size, raw.shape[0])]
+        
+        X_test = []
+        for i in range(self.window_size, raw.shape[0]):
+            X_test.append(raw[i-self.window_size:i])
         X_test = np.array(X_test)
-
-        X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+        
         return X_test
 
     def plot_predictions(self):
         """Plot the predictions vs actual values"""
         fig = plt.figure(figsize=(14,7))
-        plt.plot(self.train.index, self.train["Close"], label="Train Closing Price")
-        plt.plot(self.test.index, self.test["Close"], label="Test Closing Price")
-        plt.plot(self.test.index, self.test["Predictions_lstm"], label="Predicted Closing Price")
-        plt.title("LSTM Model")
+        # Plot training data
+        plt.plot(self.train.index, self.train["Close"], 
+                 label="Training Data", color='blue', alpha=0.6)
+        # Plot test data (actual)
+        plt.plot(self.test.index, self.test["Close"], 
+                 label="Actual Prices", color='green', alpha=0.8)
+        # Plot predictions
+        plt.plot(self.test.index, self.test["Predictions_lstm"], 
+                 label="Predicted Prices", color='red', linestyle='--')
+        
+        plt.title(f"Stock Price Prediction - {self.ticker_symbol}")
         plt.xlabel("Date")
         plt.ylabel("Stock Price ($)")
-        plt.legend(loc="upper left")
+        plt.legend(loc="best")
+        plt.grid(True, alpha=0.3)
+        
+        # Add confidence intervals
+        std_dev = np.std(self.test["Close"] - self.test["Predictions_lstm"])
+        plt.fill_between(self.test.index, 
+                        self.test["Predictions_lstm"] - 2*std_dev,
+                        self.test["Predictions_lstm"] + 2*std_dev,
+                        color='red', alpha=0.1)
+        
         self.run["Plot of Stock Predictions"].upload(neptune.types.File.as_image(fig))
         return fig
+
+    def _calculate_rsi(self, prices, periods=14):
+        """Calculate Relative Strength Index"""
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=periods).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=periods).mean()
+        rs = gain / loss
+        return 100 - (100 / (1 + rs))
+
+    def _calculate_macd(self, prices, slow=26, fast=12, signal=9):
+        """Calculate MACD (Moving Average Convergence Divergence)"""
+        exp1 = prices.ewm(span=fast, adjust=False).mean()
+        exp2 = prices.ewm(span=slow, adjust=False).mean()
+        macd = exp1 - exp2
+        return macd.ewm(span=signal, adjust=False).mean()
 
 # Example usage
 # predictor = StockPredictor(

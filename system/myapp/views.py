@@ -41,7 +41,14 @@ def train_model(request):
             ticker_symbol=ticker,
             neptune_project=os.getenv('NEPTUNE_PROJECT'),
             neptune_api_token=os.getenv('NEPTUNE_API_TOKEN'),
-            run_name=f"{ticker}_prediction"
+            run_name=f"{ticker}_prediction",
+            historical_period="5y",
+            test_ratio=0.15,
+            window_size=60,
+            lstm_units=128,
+            optimizer="adam",
+            epochs=50,
+            batch_size=32
         )
         
         try:
