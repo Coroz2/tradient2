@@ -55,7 +55,7 @@ export default function StockPredictionChart({ selectedTicker, refreshTrigger }:
           .from('stock_predictions')
           .select('*')
           .eq('ticker', selectedTicker)
-          .order('date', {ascending: false})
+          .order('date', { ascending: false })
           .limit(1000);
 
         if (supabaseError) throw supabaseError;
