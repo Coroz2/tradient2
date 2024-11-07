@@ -77,4 +77,4 @@ def get_articles_sentiments(keywrd, startd, sources_list=None, show_all_articles
 # Example usage:
 if __name__ == "__main__":
     # Example of using the function
-    result_df = get_articles_sentiments('technology', '01-Nov-2024', show_all_articles=True)
+    result_df = get_articles_sentiments('Tesla Stock', '01-Nov-2024', show_all_articles=True)
