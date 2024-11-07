@@ -281,9 +281,7 @@ class StockPredictor:
             tf.keras.callbacks.EarlyStopping(
                 monitor='val_loss',
                 patience=10,
-                patience=10,
                 restore_best_weights=True,
-                min_delta=0.0001
                 min_delta=0.0001
             ),
             tf.keras.callbacks.ReduceLROnPlateau(
@@ -292,12 +290,7 @@ class StockPredictor:
                 patience=5,
                 min_lr=0.00001,
                 min_delta=0.0001
-                factor=0.2,
-                patience=5,
-                min_lr=0.00001,
-                min_delta=0.0001
             ),
-            TimeoutCallback(seconds=600)
             TimeoutCallback(seconds=600)
         ]
         
@@ -395,7 +388,6 @@ class StockPredictor:
 
     def save_model(self, save_dir='models'):
         """Save the trained model and predictions"""
-        """Save the trained model and predictions"""
         os.makedirs(save_dir, exist_ok=True)
         model_save_path = os.path.join(save_dir, f'lstm_{self.ticker_symbol}.h5')
         self.model.save(model_save_path)
@@ -406,49 +398,21 @@ class StockPredictor:
         print("Test Data Shape:", self.test.shape)
         print("\nSample of Test Data and Predictions:")
         debug_df = pd.DataFrame({
-            'Date': self.test.index[-5:],  # Last 5 dates
+            'Date': self.test.index[-5:],
             'Actual': self.test['Close'][-5:],
             'Predicted': self.test['Predictions_lstm'][-5:],
             'Difference': self.test['Close'][-5:] - self.test['Predictions_lstm'][-5:]
         })
         print(debug_df.to_string())
         
-        # Prepare data for saving
-        predictions_df = pd.DataFrame({
-            'Date': self.test.index,
-            'Close': self.test['Close'],
-            'Predictions_lstm': self.test['Predictions_lstm']
-        })
-        
-
-        # Debug logging
-        print("\nDEBUG: Verification of predictions")
-        print("Test Data Shape:", self.test.shape)
-        print("\nSample of Test Data and Predictions:")
-        debug_df = pd.DataFrame({
-            'Date': self.test.index[-5:],  # Last 5 dates
-            'Actual': self.test['Close'][-5:],
-            'Predicted': self.test['Predictions_lstm'][-5:],
-            'Difference': self.test['Close'][-5:] - self.test['Predictions_lstm'][-5:]
-        })
-        print(debug_df.to_string())
-        
-        # Prepare data for saving
-        predictions_df = pd.DataFrame({
-            'Date': self.test.index,
-            'Close': self.test['Close'],
-            'Predictions_lstm': self.test['Predictions_lstm']
-        })
-        
-        # Save both training and test data to Supabase
+        # Save predictions to Supabase
         save_predictions_to_supabase(
-            self.train, 
-            predictions_df,
-            predictions_df['Predictions_lstm'],
-            predictions_df,
-            predictions_df['Predictions_lstm'],
-            self.ticker_symbol
+            train_data=self.train,
+            test_data=self.test,
+            predicted_prices=self.test['Predictions_lstm'],
+            ticker_symbol=self.ticker_symbol
         )
+        
         print("Saved predictions to supabase")
         return model_save_path
 
