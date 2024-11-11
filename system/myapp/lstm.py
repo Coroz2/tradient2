@@ -134,43 +134,14 @@ class StockPredictor:
         self.stockprices[feature_columns] = self.stockprices[feature_columns].fillna(method='ffill').fillna(0)
         
         # Split data
-        # Calculate technical indicators
-        feature_columns = ['Close', 'MA20', 'MA50', 'RSI', 'MACD', 'Price_Change', 'Price_Change_MA5']
-        
-        # Calculate all indicators
-        self.stockprices['MA20'] = self.stockprices['Close'].rolling(window=20).mean()
-        self.stockprices['MA50'] = self.stockprices['Close'].rolling(window=50).mean()
-        self.stockprices['RSI'] = self._calculate_rsi(self.stockprices['Close'])
-        self.stockprices['MACD'] = self._calculate_macd(self.stockprices['Close'])
-        self.stockprices['Price_Change'] = self.stockprices['Close'].pct_change()
-        self.stockprices['Price_Change_MA5'] = self.stockprices['Price_Change'].rolling(window=5).mean()
-        
-        # Forward fill and standardize all features
-        self.stockprices[feature_columns] = self.stockprices[feature_columns].fillna(method='ffill').fillna(0)
-        
-        # Split data
         train_size = int((1 - self.test_ratio) * len(self.stockprices))
         
         # Scale features
-        # Scale features
         self.scaler = StandardScaler()
         scaled_data = self.scaler.fit_transform(self.stockprices[feature_columns])
-        scaled_data = self.scaler.fit_transform(self.stockprices[feature_columns])
         
-        # Prepare training data with all features
         # Prepare training data with all features
         scaled_data_train = scaled_data[:train_size]
-        X_train, y_train = [], []
-        
-        for i in range(self.window_size, len(scaled_data_train)):
-            X_train.append(scaled_data_train[i-self.window_size:i])
-            y_train.append(scaled_data_train[i, 0])  # Only predict Close price
-        
-        X_train = np.array(X_train)
-        y_train = np.array(y_train)
-        
-        self.train = self.stockprices[:train_size][['Close']]
-        self.test = self.stockprices[train_size:][['Close']]
         X_train, y_train = [], []
         
         for i in range(self.window_size, len(scaled_data_train)):
@@ -269,8 +240,6 @@ class StockPredictor:
         
         
         self.model = Model(inp, out)
-        optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
-        self.model.compile(loss="huber", optimizer=optimizer)
         optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
         self.model.compile(loss="huber", optimizer=optimizer)
         return self.model
@@ -452,37 +421,19 @@ class StockPredictor:
         """Preprocess test data with all features"""
         feature_columns = ['Close', 'MA20', 'MA50', 'RSI', 'MACD', 'Price_Change', 'Price_Change_MA5']
         raw = self.stockprices[feature_columns][len(self.stockprices) - len(self.test) - self.window_size:].values
-        """Preprocess test data with all features"""
-        feature_columns = ['Close', 'MA20', 'MA50', 'RSI', 'MACD', 'Price_Change', 'Price_Change_MA5']
-        raw = self.stockprices[feature_columns][len(self.stockprices) - len(self.test) - self.window_size:].values
         raw = self.scaler.transform(raw)
-        
-        X_test = []
-        for i in range(self.window_size, raw.shape[0]):
-            X_test.append(raw[i-self.window_size:i])
         
         X_test = []
         for i in range(self.window_size, raw.shape[0]):
             X_test.append(raw[i-self.window_size:i])
         X_test = np.array(X_test)
         
-        
         return X_test
 
     def plot_predictions(self):
         """Plot the predictions vs actual values"""
         fig = plt.figure(figsize=(14,7))
-        # Plot training data
-        plt.plot(self.train.index, self.train["Close"], 
-                 label="Training Data", color='blue', alpha=0.6)
-        # Plot test data (actual)
-        plt.plot(self.test.index, self.test["Close"], 
-                 label="Actual Prices", color='green', alpha=0.8)
-        # Plot predictions
-        plt.plot(self.test.index, self.test["Predictions_lstm"], 
-                 label="Predicted Prices", color='red', linestyle='--')
         
-        plt.title(f"Stock Price Prediction - {self.ticker_symbol}")
         # Plot training data
         plt.plot(self.train.index, self.train["Close"], 
                  label="Training Data", color='blue', alpha=0.6)
@@ -506,17 +457,6 @@ class StockPredictor:
                         self.test["Predictions_lstm"] + 2*std_dev,
                         color='red', alpha=0.1)
         
-        plt.legend(loc="best")
-        plt.grid(True, alpha=0.3)
-        
-        # Add confidence intervals
-        std_dev = np.std(self.test["Close"] - self.test["Predictions_lstm"])
-        plt.fill_between(self.test.index, 
-                        self.test["Predictions_lstm"] - 2*std_dev,
-                        self.test["Predictions_lstm"] + 2*std_dev,
-                        color='red', alpha=0.1)
-        
-        self.run["Plot of Stock Predictions"].upload(neptune.types.File.as_image(fig))
         return fig
 
     def _calculate_rsi(self, prices, periods=14):
