@@ -6,6 +6,8 @@ import pandas as pd
 from .lstm import StockPredictor
 from dotenv import load_dotenv
 from pathlib import Path
+from ml.sentiment import get_articles_sentiments
+
 
 load_dotenv()
 
@@ -61,3 +63,24 @@ def train_model(request):
             'status': 'error',
             'message': str(e)
         }, status=500)
+    
+@api_view(['POST'])
+def get_sentiment_analysis(request):
+    """Get sentiment analysis for a given ticker"""
+    ticker = request.data.get('ticker')
+    date = request.data.get('date')
+    if not ticker or not date:
+        return Response({'error': 'Ticker and date are required'}, status=400)
+    
+    try:
+        result_df = get_articles_sentiments(ticker, date)
+        return Response({
+            'status': 'success',
+            'sentiment_analysis': result_df.to_dict('records')
+        })
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+

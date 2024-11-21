@@ -9,8 +9,8 @@ import os
 import neptune
 from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
-from tensorflow.keras.layers import LSTM, Dense, Input
-from tensorflow.keras.models import Model
+# from tensorflow.keras.layers import LSTM, Dense, Input
+# from tensorflow.keras.models import Model
 from .supabase_client import save_predictions_to_supabase
 from dotenv import load_dotenv
 

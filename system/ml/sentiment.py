@@ -1,3 +1,5 @@
+NEWS_API_KEY = "af4db6bbbcf84b8c8974b38dea460ffb"
+
 import nltk
 #remove the line before after running it for the first time
 nltk.download('vader_lexicon')
@@ -5,17 +7,17 @@ import numpy as np
 import pandas as pd
 from newsapi import NewsApiClient
 from datetime import date, timedelta, datetime
+import os
 
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 sia = SentimentIntensityAnalyzer()
 
 pd.set_option('display.max_colwidth', 1000)  # Set max column width for easier readability
 
-NEWS_API_KEY = 'af4db6bbbcf84b8c8974b38dea460ffb'
 
 def get_articles_sentiments(keywrd, startd, sources_list=None, show_all_articles=False):
     newsapi = NewsApiClient(api_key=NEWS_API_KEY)
-    
+    print(os.getenv('NEWS_API_KEY'))
     if type(startd) == str:
         my_date = datetime.strptime(startd, '%d-%b-%Y')
     else:
@@ -41,7 +43,8 @@ def get_articles_sentiments(keywrd, startd, sources_list=None, show_all_articles
     date_sentiments = {}
     date_sentiments_list = []
     seen = set()
-    
+    sentiment_scores = []
+
     # Analyzing the sentiment of each article
     for article in articles['articles']:
         if str(article['title']) in seen:
@@ -49,30 +52,19 @@ def get_articles_sentiments(keywrd, startd, sources_list=None, show_all_articles
         else:
             seen.add(str(article['title']))
             article_content = str(article['title']) + '. ' + str(article['description'])
-            sentiment = sia.polarity_scores(article_content)['compound']
+            sentiment = sia.polarity_scores(article_content)
+            sentiment_scores.append(sentiment['compound'])
             date_sentiments.setdefault(my_date, []).append(sentiment)
             date_sentiments_list.append((sentiment, article['url'], article['title'], article['description']))
 
-    # Sorting the articles by sentiment
-    date_sentiments_l = sorted(date_sentiments_list, key=lambda tup: tup[0], reverse=True)
-    sent_list = list(date_sentiments.values())[0]
-    
-    # Creating a DataFrame to display the results neatly
+    # Calculate the average sentiment score
+    avg_sentiment_score = np.mean(sentiment_scores)
+
+    # Create a DataFrame to display the results neatly
     df = pd.DataFrame(date_sentiments_list, columns=['Sentiment', 'URL', 'Title', 'Description'])
     
-    # Displaying results in the console
-    print(f"Sentiment Analysis for {keywrd} on {my_date.strftime('%d-%b-%Y')}")
-    print("-" * 80)
-    print(f"Total articles analyzed: {len(df)}")
-    print(f"Top 5 Positive Articles:\n")
-    print(df.head(5))
-    
-    # Optionally, print all articles if show_all_articles is set to True
-    if show_all_articles:
-        print("\nAll Articles Sentiment Analysis:")
-        print(df)
-    
-    return df  # Return the DataFrame for further analysis or saving
+    print(avg_sentiment_score)
+    return df, avg_sentiment_score
 
 # Example usage:
 if __name__ == "__main__":
