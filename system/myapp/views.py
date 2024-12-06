@@ -66,17 +66,21 @@ def train_model(request):
     
 @api_view(['POST'])
 def get_sentiment_analysis(request):
+    print("hit rreust")
     """Get sentiment analysis for a given ticker"""
+    print("hit rreust 3")
     ticker = request.data.get('ticker')
-    date = request.data.get('date')
-    if not ticker or not date:
+    if not ticker:
         return Response({'error': 'Ticker and date are required'}, status=400)
     
     try:
-        result_df = get_articles_sentiments(ticker, date)
+        print("hit rreust 2")
+        result_df = get_articles_sentiments(ticker)[0]
+        average_score = get_articles_sentiments(ticker)[1]
         return Response({
             'status': 'success',
-            'sentiment_analysis': result_df.to_dict('records')
+            'sentiment_analysis': result_df,
+            'average_score': average_score
         })
     except Exception as e:
         return Response({
