@@ -6,6 +6,7 @@ import pandas as pd
 from .lstm import StockPredictor
 from dotenv import load_dotenv
 from pathlib import Path
+from ml.sentiment import get_articles_sentiments
 import traceback
 import logging
 from rest_framework import status
@@ -83,4 +84,25 @@ def train_model(request):
             'status': 'error',
             'message': str(e),
             'error_type': 'training_error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+def get_sentiment_analysis(request):
+    """Get sentiment analysis for a given ticker"""
+    ticker = request.data.get('ticker')
+    if not ticker:
+        return Response({'error': 'Ticker symbol is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        result_df, average_score = get_articles_sentiments(ticker)
+        return Response({
+            'status': 'success',
+            'sentiment_analysis': result_df,
+            'average_score': average_score
+        })
+    except Exception as e:
+        logging.error(f"Error getting sentiment analysis: {traceback.format_exc()}")
+        return Response({
+            'status': 'error',
+            'message': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
