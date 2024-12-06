@@ -2,6 +2,7 @@ from supabase import create_client
 from django.conf import settings
 import os
 from dotenv import load_dotenv
+import pandas as pd
 
 # Load environment variables
 load_dotenv()

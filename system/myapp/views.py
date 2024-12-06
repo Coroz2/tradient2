@@ -7,7 +7,9 @@ from .lstm import StockPredictor
 from dotenv import load_dotenv
 from pathlib import Path
 from ml.sentiment import get_articles_sentiments
-
+import traceback
+import logging
+from rest_framework import status
 
 load_dotenv()
 
@@ -30,18 +32,36 @@ def train_model(request):
     """Train LSTM model for selected ticker"""
     ticker = request.data.get('ticker')
     if not ticker:
-        return Response({'error': 'Ticker is required'}, status=400)
+        return Response(
+            {'error': 'Ticker symbol is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
     
     try:
         predictor = StockPredictor(
             ticker_symbol=ticker,
             neptune_project=os.getenv('NEPTUNE_PROJECT'),
             neptune_api_token=os.getenv('NEPTUNE_API_TOKEN'),
-            run_name=f"{ticker}_prediction"
+            run_name=f"{ticker}_prediction",
+            historical_period="5y",
+            test_ratio=0.15,
+            window_size=60,
+            lstm_units=128,
+            optimizer="adam",
+            epochs=50,
+            batch_size=32
         )
         
-        # Run prediction pipeline
-        predictor.fetch_data()
+        try:
+            predictor.fetch_data()
+        except ValueError as e:
+            return Response({
+                'status': 'error',
+                'message': str(e),
+                'error_type': 'data_fetch_error'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Continue with the rest of the pipeline
         X_train, y_train = predictor.prepare_data()
         predictor.initialize_neptune(["POST"])
         predictor.build_model(X_train.shape)
@@ -59,32 +79,30 @@ def train_model(request):
         })
         
     except Exception as e:
+        logging.error(f"Error training model: {traceback.format_exc()}")
         return Response({
             'status': 'error',
-            'message': str(e)
-        }, status=500)
-    
+            'message': str(e),
+            'error_type': 'training_error'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 @api_view(['POST'])
 def get_sentiment_analysis(request):
-    print("hit rreust")
     """Get sentiment analysis for a given ticker"""
-    print("hit rreust 3")
     ticker = request.data.get('ticker')
     if not ticker:
-        return Response({'error': 'Ticker and date are required'}, status=400)
+        return Response({'error': 'Ticker symbol is required'}, status=status.HTTP_400_BAD_REQUEST)
     
     try:
-        print("hit rreust 2")
-        result_df = get_articles_sentiments(ticker)[0]
-        average_score = get_articles_sentiments(ticker)[1]
+        result_df, average_score = get_articles_sentiments(ticker)
         return Response({
             'status': 'success',
             'sentiment_analysis': result_df,
             'average_score': average_score
         })
     except Exception as e:
+        logging.error(f"Error getting sentiment analysis: {traceback.format_exc()}")
         return Response({
             'status': 'error',
             'message': str(e)
-        }, status=500)
-
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

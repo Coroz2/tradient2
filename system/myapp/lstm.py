@@ -13,8 +13,24 @@ import tensorflow as tf
 # from tensorflow.keras.models import Model
 from .supabase_client import save_predictions_to_supabase
 from dotenv import load_dotenv
+from .overfitting_detector import OverfittingDetector
+import time
 
 load_dotenv()
+
+class TimeoutCallback(tf.keras.callbacks.Callback):
+    def __init__(self, seconds):
+        super().__init__()
+        self.seconds = seconds
+        self.start_time = None
+    
+    def on_train_begin(self, logs=None):
+        self.start_time = time.time()
+    
+    def on_epoch_end(self, epoch, logs=None):
+        if time.time() - self.start_time > self.seconds:
+            self.model.stop_training = True
+            print(f"\nTimeout reached after {self.seconds} seconds")
 
 class StockPredictor:
     def __init__(self, 
@@ -71,48 +87,72 @@ class StockPredictor:
 
     def fetch_data(self):
         """Fetch historical stock data"""
-        ticker = yf.Ticker(self.ticker_symbol)
-        historical_data = ticker.history(period=self.historical_period)
+        try:
+            ticker = yf.Ticker(self.ticker_symbol)
+            historical_data = ticker.history(period=self.historical_period)
+            
+            if historical_data.empty:
+                raise ValueError(f"No data found for {self.ticker_symbol}. The stock might be delisted.")
+            
+            # Replace deprecated fillna method
+            historical_data = historical_data.ffill().bfill()
+            
+            self.stockprices = historical_data[['Close']].copy()
+            self.stockprices.index = pd.to_datetime(self.stockprices.index)
+            
+            # Verify we have enough data
+            if len(self.stockprices) < self.window_size * 2:
+                raise ValueError(
+                    f"Insufficient data for {self.ticker_symbol}. "
+                    f"Found only {len(self.stockprices)} days of data, but need at least {self.window_size * 2} days."
+                )
+            
+            return self.stockprices
         
-        # Fill NaN values with the mean of or just Drop
-        #  historical_data = historical_data.dropna()
-        historical_data = historical_data.fillna(method='ffill').fillna(method='bfill')
-        
-        self.stockprices = historical_data[['Close']].copy()
-        self.stockprices.index = pd.to_datetime(self.stockprices.index)
-        
-        # Verify we have enough data
-        if len(self.stockprices) < self.window_size * 2:
-            raise ValueError(f"Insufficient data for {self.ticker_symbol}. Need at least {self.window_size * 2} days of data.")
-        
-        return self.stockprices
+        except Exception as e:
+            if "No data found" in str(e):
+                raise ValueError(f"Stock {self.ticker_symbol} appears to be delisted or invalid.")
+            raise
 
     def prepare_data(self):
         """Prepare and split the data into training and testing sets"""
         if self.stockprices is None or len(self.stockprices) == 0:
             raise ValueError("No stock data available. Please fetch data first.")
             
+        # Calculate technical indicators
+        feature_columns = ['Close', 'MA20', 'MA50', 'RSI', 'MACD', 'Price_Change', 'Price_Change_MA5']
+        
+        # Calculate all indicators
+        self.stockprices['MA20'] = self.stockprices['Close'].rolling(window=20).mean()
+        self.stockprices['MA50'] = self.stockprices['Close'].rolling(window=50).mean()
+        self.stockprices['RSI'] = self._calculate_rsi(self.stockprices['Close'])
+        self.stockprices['MACD'] = self._calculate_macd(self.stockprices['Close'])
+        self.stockprices['Price_Change'] = self.stockprices['Close'].pct_change()
+        self.stockprices['Price_Change_MA5'] = self.stockprices['Price_Change'].rolling(window=5).mean()
+        
+        # Forward fill and standardize all features
+        self.stockprices[feature_columns] = self.stockprices[feature_columns].fillna(method='ffill').fillna(0)
+        
+        # Split data
         train_size = int((1 - self.test_ratio) * len(self.stockprices))
-        if train_size < self.window_size:
-            raise ValueError(f"Insufficient training data. Need at least {self.window_size} samples.")
-            
+        
+        # Scale features
+        self.scaler = StandardScaler()
+        scaled_data = self.scaler.fit_transform(self.stockprices[feature_columns])
+        
+        # Prepare training data with all features
+        scaled_data_train = scaled_data[:train_size]
+        X_train, y_train = [], []
+        
+        for i in range(self.window_size, len(scaled_data_train)):
+            X_train.append(scaled_data_train[i-self.window_size:i])
+            y_train.append(scaled_data_train[i, 0])  # Only predict Close price
+        
+        X_train = np.array(X_train)
+        y_train = np.array(y_train)
+        
         self.train = self.stockprices[:train_size][['Close']]
         self.test = self.stockprices[train_size:][['Close']]
-        
-        # Scale the data
-        self.scaler = StandardScaler()
-        scaled_data = self.scaler.fit_transform(self.stockprices[["Close"]])
-        
-        # Add small epsilon to prevent division by zero in MAPE calculation
-        epsilon = 1e-10
-        scaled_data = np.clip(scaled_data, epsilon, None)
-        
-        scaled_data_train = scaled_data[:train_size]
-        
-        X_train, y_train = self._extract_seqX_outcomeY(scaled_data_train, 
-                                                      self.window_size, 
-                                                      self.window_size)
-        X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
         
         return X_train, y_train
 
@@ -139,62 +179,165 @@ class StockPredictor:
         }
 
     def build_model(self, input_shape):
-        """Build and compile the LSTM model"""
-        # Clear any existing model first
+        """Build and compile the LSTM model with regularization"""
+        """Build and compile the LSTM model with regularization"""
         if self.model is not None:
             del self.model
             tf.keras.backend.clear_session()
         
-        # Build the model
-        inp = Input(shape=(input_shape[1], 1))
-        x = LSTM(units=self.lstm_units, return_sequences=True)(inp)
-        x = LSTM(units=self.lstm_units)(x)
+        # Build the model with regularization
+        inp = Input(shape=(input_shape[1], input_shape[2]))  # Changed to handle multiple features
+        
+        # First LSTM layer
+        x = LSTM(units=self.lstm_units, 
+                 return_sequences=True,
+                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(inp)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        
+        # Second LSTM layer
+        x = LSTM(units=self.lstm_units//2,
+                 return_sequences=True,
+                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        
+        # Third LSTM layer
+        x = LSTM(units=self.lstm_units//4,
+                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        
+        # Dense layers
+        x = Dense(64, activation='relu')(x)
+        # Build the model with regularization
+        inp = Input(shape=(input_shape[1], input_shape[2]))  # Changed to handle multiple features
+        
+        # First LSTM layer
+        x = LSTM(units=self.lstm_units, 
+                 return_sequences=True,
+                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(inp)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        
+        # Second LSTM layer
+        x = LSTM(units=self.lstm_units//2,
+                 return_sequences=True,
+                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        
+        # Third LSTM layer
+        x = LSTM(units=self.lstm_units//4,
+                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        
+        # Dense layers
+        x = Dense(64, activation='relu')(x)
+        x = tf.keras.layers.Dropout(0.2)(x)
         out = Dense(1, activation="linear")(x)
+        
+        
         self.model = Model(inp, out)
-        self.model.compile(loss="mean_squared_error", optimizer=self.optimizer)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+        self.model.compile(loss="huber", optimizer=optimizer)
         return self.model
 
     def train_model(self, X_train, y_train):
         """Train the LSTM model"""
-        # Add callbacks for training
         callbacks = [
             tf.keras.callbacks.EarlyStopping(
                 monitor='val_loss',
-                patience=5,
-                restore_best_weights=True
+                patience=10,
+                restore_best_weights=True,
+                min_delta=0.0001
             ),
             tf.keras.callbacks.ReduceLROnPlateau(
                 monitor='val_loss',
                 factor=0.2,
-                patience=3,
-                min_lr=0.0001
-            )
+                patience=5,
+                min_lr=0.00001,
+                min_delta=0.0001
+            ),
+            TimeoutCallback(seconds=600)
         ]
         
-        # Train the model and log metrics manually
-        history = self.model.fit(
-            X_train, y_train,
-            epochs=self.epochs,
-            batch_size=self.batch_size,
-            verbose=1,
-            validation_split=0.1,
-            shuffle=True,
-            callbacks=callbacks
-        )
+        # Split data into train and validation sets
+        val_split = 0.15
+        split_idx = int(len(X_train) * (1 - val_split))
+        X_train_split = X_train[:split_idx]
+        y_train_split = y_train[:split_idx]
+        X_val = X_train[split_idx:]
+        y_val = y_train[split_idx:]
         
-        # Log training history to Neptune
-        for epoch in range(len(history.history['loss'])):
-            self.run["metrics/epoch/loss"].log(history.history['loss'][epoch])
-            self.run["metrics/epoch/val_loss"].log(history.history['val_loss'][epoch])
-        
-        return history
+        try:
+            # Train the model with simplified parameters
+            history = self.model.fit(
+                X_train_split, y_train_split,
+                epochs=self.epochs,
+                batch_size=self.batch_size,
+                verbose=1,
+                validation_data=(X_val, y_val),
+                shuffle=True,
+                callbacks=callbacks
+            )
+            
+            # Create and use the OverfittingDetector
+            try:
+                detector = OverfittingDetector(
+                    history=history,
+                    model=self.model,
+                    X_train=X_train_split,
+                    y_train=y_train_split,
+                    X_val=X_val,
+                    y_val=y_val,
+                    neptune_run=self.run
+                )
+                
+                is_overfit, metrics = detector.analyze_overfitting(threshold=0.1)
+                
+                # Enhanced logging of results
+                print("\n=== Overfitting Analysis Results ===")
+                print(f"Is model overfitting? {'Yes' if is_overfit else 'No'}")
+                print("\nMetrics:")
+                for metric_name, value in metrics.items():
+                    print(f"{metric_name}: {value:.4f}")
+                
+                # Log training history to Neptune
+                for epoch in range(len(history.history['loss'])):
+                    self.run["metrics/epoch/loss"].log(history.history['loss'][epoch])
+                    self.run["metrics/epoch/val_loss"].log(history.history['val_loss'][epoch])
+                    
+            except Exception as e:
+                print(f"\nOverfitting analysis error: {str(e)}")
+                print("Training completed but overfitting analysis failed.")
+            
+            return history
+            
+        except Exception as e:
+            print(f"Training interrupted: {str(e)}")
+            raise
 
     def make_predictions(self):
         """Make predictions on the test set"""
         X_test = self._preprocess_testdat()
         predicted_price_ = self.model.predict(X_test)
-        predicted_price = self.scaler.inverse_transform(predicted_price_)
-        self.test["Predictions_lstm"] = predicted_price
+        
+        # Create a dummy array with same shape as training data
+        dummy = np.zeros((predicted_price_.shape[0], 7))  # 7 is number of features
+        dummy[:, 0] = predicted_price_.flatten()  # Put predictions in first column (Close price)
+        
+        # Inverse transform
+        predicted_price = self.scaler.inverse_transform(dummy)[:, 0]  # Take only the Close price column
+        
+        # Ensure we're only using available test data
+        current_date = pd.Timestamp.now()  # timezone-naive
+        self.test.index = self.test.index.tz_localize(None)  # Remove timezone information
+        self.test = self.test[self.test.index <= current_date]
+        self.test["Predictions_lstm"] = predicted_price[:len(self.test)]
+        
+        print(f"Debug: Test data date range: {self.test.index[0]} to {self.test.index[-1]}")
         return self.test
 
     def evaluate_model(self):
@@ -213,19 +356,32 @@ class StockPredictor:
         return rmse, mape
 
     def save_model(self, save_dir='models'):
-        """Save the trained model"""
+        """Save the trained model and predictions"""
         os.makedirs(save_dir, exist_ok=True)
         model_save_path = os.path.join(save_dir, f'lstm_{self.ticker_symbol}.h5')
         self.model.save(model_save_path)
         self.run['system/ml/models'].upload(model_save_path)
 
-        # Save both training and test data to Supabase
+        # Debug logging
+        print("\nDEBUG: Verification of predictions")
+        print("Test Data Shape:", self.test.shape)
+        print("\nSample of Test Data and Predictions:")
+        debug_df = pd.DataFrame({
+            'Date': self.test.index[-5:],
+            'Actual': self.test['Close'][-5:],
+            'Predicted': self.test['Predictions_lstm'][-5:],
+            'Difference': self.test['Close'][-5:] - self.test['Predictions_lstm'][-5:]
+        })
+        print(debug_df.to_string())
+        
+        # Save predictions to Supabase
         save_predictions_to_supabase(
-            self.train, 
-            self.test, 
-            self.test["Predictions_lstm"], 
-            self.ticker_symbol
+            train_data=self.train,
+            test_data=self.test,
+            predicted_prices=self.test['Predictions_lstm'],
+            ticker_symbol=self.ticker_symbol
         )
+        
         print("Saved predictions to supabase")
         return model_save_path
 
@@ -262,28 +418,76 @@ class StockPredictor:
         return mape
 
     def _preprocess_testdat(self):
-        raw = self.stockprices["Close"][len(self.stockprices) - len(self.test) - self.window_size:].values
-        raw = raw.reshape(-1,1)
+        """Preprocess test data with all features"""
+        feature_columns = ['Close', 'MA20', 'MA50', 'RSI', 'MACD', 'Price_Change', 'Price_Change_MA5']
+        raw = self.stockprices[feature_columns][len(self.stockprices) - len(self.test) - self.window_size:].values
         raw = self.scaler.transform(raw)
-
-        X_test = [raw[i-self.window_size:i, 0] for i in range(self.window_size, raw.shape[0])]
+        
+        X_test = []
+        for i in range(self.window_size, raw.shape[0]):
+            X_test.append(raw[i-self.window_size:i])
         X_test = np.array(X_test)
-
-        X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+        
         return X_test
 
     def plot_predictions(self):
         """Plot the predictions vs actual values"""
         fig = plt.figure(figsize=(14,7))
-        plt.plot(self.train.index, self.train["Close"], label="Train Closing Price")
-        plt.plot(self.test.index, self.test["Close"], label="Test Closing Price")
-        plt.plot(self.test.index, self.test["Predictions_lstm"], label="Predicted Closing Price")
-        plt.title("LSTM Model")
+        
+        # Plot training data
+        plt.plot(self.train.index, self.train["Close"], 
+                 label="Training Data", color='blue', alpha=0.6)
+        # Plot test data (actual)
+        plt.plot(self.test.index, self.test["Close"], 
+                 label="Actual Prices", color='green', alpha=0.8)
+        # Plot predictions
+        plt.plot(self.test.index, self.test["Predictions_lstm"], 
+                 label="Predicted Prices", color='red', linestyle='--')
+        
+        plt.title(f"Stock Price Prediction - {self.ticker_symbol}")
         plt.xlabel("Date")
         plt.ylabel("Stock Price ($)")
-        plt.legend(loc="upper left")
-        self.run["Plot of Stock Predictions"].upload(neptune.types.File.as_image(fig))
+        plt.legend(loc="best")
+        plt.grid(True, alpha=0.3)
+        
+        # Add confidence intervals
+        std_dev = np.std(self.test["Close"] - self.test["Predictions_lstm"])
+        plt.fill_between(self.test.index, 
+                        self.test["Predictions_lstm"] - 2*std_dev,
+                        self.test["Predictions_lstm"] + 2*std_dev,
+                        color='red', alpha=0.1)
+        
         return fig
+
+    def _calculate_rsi(self, prices, periods=14):
+        """Calculate Relative Strength Index"""
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=periods).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=periods).mean()
+        rs = gain / loss
+        return 100 - (100 / (1 + rs))
+
+    def _calculate_macd(self, prices, slow=26, fast=12, signal=9):
+        """Calculate MACD (Moving Average Convergence Divergence)"""
+        exp1 = prices.ewm(span=fast, adjust=False).mean()
+        exp2 = prices.ewm(span=slow, adjust=False).mean()
+        macd = exp1 - exp2
+        return macd.ewm(span=signal, adjust=False).mean()
+
+    def _calculate_rsi(self, prices, periods=14):
+        """Calculate Relative Strength Index"""
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=periods).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=periods).mean()
+        rs = gain / loss
+        return 100 - (100 / (1 + rs))
+
+    def _calculate_macd(self, prices, slow=26, fast=12, signal=9):
+        """Calculate MACD (Moving Average Convergence Divergence)"""
+        exp1 = prices.ewm(span=fast, adjust=False).mean()
+        exp2 = prices.ewm(span=slow, adjust=False).mean()
+        macd = exp1 - exp2
+        return macd.ewm(span=signal, adjust=False).mean()
 
 # Example usage
 # predictor = StockPredictor(
