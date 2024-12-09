@@ -18,6 +18,7 @@ pd.set_option('display.max_colwidth', 1000)  # Set max column width for easier r
 
 def get_articles_sentiments(keywrd, show_all_articles=False):
     # Initialize NewsAPI client
+    print("This is the keyword: ", keywrd)
     newsapi = NewsApiClient(api_key=NEWS_API_KEY)
 
     # Define business-related sources
@@ -34,7 +35,7 @@ def get_articles_sentiments(keywrd, show_all_articles=False):
             from_param=from_date,
             to=to_date,
             language="en",
-            sources="business-insider,financial-times,bloomberg,cnbc,forbes",
+            sources="business-insider,financial-times,bloomberg,cnbc,forbes,the-wall-street-journal,reuters,marketwatch,the-motley-fool,investopedia,techcrunch,wired,the-economic-times,nikkei,financial-express,fxstreet,kitco-news,coindesk,cointelegraph",
             sort_by="relevancy",
             page_size=100
         )
