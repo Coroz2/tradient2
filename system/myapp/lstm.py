@@ -9,8 +9,8 @@ import os
 import neptune
 from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
-# from tensorflow.keras.layers import LSTM, Dense, Input
-# from tensorflow.keras.models import Model
+from tensorflow.keras.layers import LSTM, Dense, Input, Dropout
+from tensorflow.keras.models import Model
 from .supabase_client import save_predictions_to_supabase
 from dotenv import load_dotenv
 from .overfitting_detector import OverfittingDetector
@@ -131,7 +131,7 @@ class StockPredictor:
         self.stockprices['Price_Change_MA5'] = self.stockprices['Price_Change'].rolling(window=5).mean()
         
         # Forward fill and standardize all features
-        self.stockprices[feature_columns] = self.stockprices[feature_columns].fillna(method='ffill').fillna(0)
+        self.stockprices[feature_columns] = self.stockprices[feature_columns].ffill().fillna(0)
         
         # Split data
         train_size = int((1 - self.test_ratio) * len(self.stockprices))
@@ -180,7 +180,6 @@ class StockPredictor:
 
     def build_model(self, input_shape):
         """Build and compile the LSTM model with regularization"""
-        """Build and compile the LSTM model with regularization"""
         if self.model is not None:
             del self.model
             tf.keras.backend.clear_session()
@@ -193,51 +192,25 @@ class StockPredictor:
                  return_sequences=True,
                  kernel_regularizer=tf.keras.regularizers.l2(0.01))(inp)
         x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Dropout(0.3)(x)
+        x = Dropout(0.3)(x)
         
         # Second LSTM layer
         x = LSTM(units=self.lstm_units//2,
                  return_sequences=True,
                  kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
         x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Dropout(0.3)(x)
+        x = Dropout(0.3)(x)
         
         # Third LSTM layer
         x = LSTM(units=self.lstm_units//4,
                  kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
         x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Dropout(0.3)(x)
+        x = Dropout(0.3)(x)
         
         # Dense layers
         x = Dense(64, activation='relu')(x)
-        # Build the model with regularization
-        inp = Input(shape=(input_shape[1], input_shape[2]))  # Changed to handle multiple features
-        
-        # First LSTM layer
-        x = LSTM(units=self.lstm_units, 
-                 return_sequences=True,
-                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(inp)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Dropout(0.3)(x)
-        
-        # Second LSTM layer
-        x = LSTM(units=self.lstm_units//2,
-                 return_sequences=True,
-                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Dropout(0.3)(x)
-        
-        # Third LSTM layer
-        x = LSTM(units=self.lstm_units//4,
-                 kernel_regularizer=tf.keras.regularizers.l2(0.01))(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Dropout(0.3)(x)
-        
-        # Dense layers
-        x = Dense(64, activation='relu')(x)
-        x = tf.keras.layers.Dropout(0.2)(x)
+        x = Dropout(0.2)(x)
         out = Dense(1, activation="linear")(x)
-        
         
         self.model = Model(inp, out)
         optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
