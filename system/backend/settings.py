@@ -102,7 +102,7 @@ DATABASES = {
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
-
+NEWS_API_KEY= os.getenv('NEWS_API_KEY')
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
