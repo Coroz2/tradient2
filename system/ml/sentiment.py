@@ -1,4 +1,3 @@
-NEWS_API_KEY = "af4db6bbbcf84b8c8974b38dea460ffb"
 
 import nltk
 # Remove the line below after running it for the first time
@@ -19,6 +18,7 @@ pd.set_option('display.max_colwidth', 1000)  # Set max column width for easier r
 def get_articles_sentiments(keywrd, show_all_articles=False):
     # Initialize NewsAPI client
     print("This is the keyword: ", keywrd)
+    NEWS_API_KEY = os.getenv("NEWS_API_KEY")
     newsapi = NewsApiClient(api_key=NEWS_API_KEY)
 
     # Define business-related sources
