@@ -1,41 +1,53 @@
-
 import nltk
-# Remove the line below after running it for the first time
-nltk.download('vader_lexicon')
+# Ensure NLTK's VADER Lexicon is available
+try:
+    nltk.data.find('sentiment/vader_lexicon.zip')
+except LookupError:
+    nltk.download('vader_lexicon')
 
 import numpy as np
 import pandas as pd
 from newsapi import NewsApiClient
 from datetime import datetime, timedelta
 import os
-
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
-sia = SentimentIntensityAnalyzer()
 
-pd.set_option('display.max_colwidth', 1000)  # Set max column width for easier readability
+# Check if NEWS_API_KEY is set
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
+if not NEWS_API_KEY:
+    raise EnvironmentError("NEWS_API_KEY environment variable is not set. Please set it and try again.")
 
+# Initialize Sentiment Analyzer
+try:
+    sia = SentimentIntensityAnalyzer()
+except Exception as e:
+    raise RuntimeError(f"Error initializing SentimentIntensityAnalyzer: {e}")
+
+# Set Pandas options for readability
+pd.set_option('display.max_colwidth', 1000)
 
 def get_articles_sentiments(keywrd, show_all_articles=False):
+    """Fetches articles and analyzes their sentiment."""
+    print("Keyword for search:", keywrd)
+
     # Initialize NewsAPI client
-    print("This is the keyword: ", keywrd)
-    NEWS_API_KEY = os.getenv("NEWS_API_KEY")
     newsapi = NewsApiClient(api_key=NEWS_API_KEY)
 
-    # Define business-related sources
-
-    # Get today's date in the required format
+    # Define date range for fetching articles
     my_date = datetime.today()
     to_date = my_date.strftime('%Y-%m-%dT%H:%M:%S')  # Format: YYYY-MM-DDTHH:MM:SS
     from_date = (my_date - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%S')
 
-    # Fetching articles based on keyword, date, and sources
     try:
+        # Fetch articles
         articles = newsapi.get_everything(
             q=keywrd,
             from_param=from_date,
             to=to_date,
             language="en",
-            sources="business-insider,financial-times,bloomberg,cnbc,forbes,the-wall-street-journal,reuters,marketwatch,the-motley-fool,investopedia,techcrunch,wired,the-economic-times,nikkei,financial-express,fxstreet,kitco-news,coindesk,cointelegraph",
+            sources="business-insider,financial-times,bloomberg,cnbc,forbes,the-wall-street-journal,reuters,marketwatch," \
+                    "the-motley-fool,investopedia,techcrunch,wired,the-economic-times,nikkei,financial-express,fxstreet," \
+                    "kitco-news,coindesk,cointelegraph",
             sort_by="relevancy",
             page_size=100
         )
@@ -43,7 +55,7 @@ def get_articles_sentiments(keywrd, show_all_articles=False):
         print(f"Error fetching articles: {e}")
         return None, None
 
-    if 'articles' not in articles or not articles['articles']:
+    if not articles or 'articles' not in articles or not articles['articles']:
         print("No articles found.")
         return pd.DataFrame(), 0
 
@@ -51,24 +63,32 @@ def get_articles_sentiments(keywrd, show_all_articles=False):
     seen = set()
     sentiment_scores = []
 
-    # Analyzing the sentiment of each article
     for article in articles['articles']:
-        if str(article['title']) in seen:
+        if not article.get('title') or not article.get('description'):
             continue
-        seen.add(str(article['title']))
-        article_content = f"{article['title']}. {article['description']}"
-        sentiment = sia.polarity_scores(article_content)
+
+        title = str(article['title'])
+        if title in seen:
+            continue
+
+        seen.add(title)
+        article_content = f"{title}. {article['description']}"
+
+        try:
+            sentiment = sia.polarity_scores(article_content)
+        except Exception as e:
+            print(f"Error analyzing sentiment for article '{title}': {e}")
+            continue
+
         sentiment_scores.append(sentiment['compound'])
-        date_sentiments_list.append((sentiment, article['url'], article['title'], article['description']))
+        date_sentiments_list.append((sentiment, article['url'], title, article['description']))
 
-    # Calculate the average sentiment score
-    avg_sentiment_score = np.mean(sentiment_scores) if sentiment_scores else 0
 
-    # Create a DataFrame to display the results neatly
+    avg_sentiment_score = np.mean(sentiment_scores)
     df = pd.DataFrame(date_sentiments_list, columns=['Sentiment', 'URL', 'Title', 'Description'])
 
-    print("Average Sentiment Score:")
-    print(avg_sentiment_score)
-    print('df', df.head())
+    print("Average Sentiment Score:", avg_sentiment_score)
+    print("Sample DataFrame:")
+    print(df.head())
 
     return df, avg_sentiment_score
