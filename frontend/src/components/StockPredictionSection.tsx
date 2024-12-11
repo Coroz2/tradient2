@@ -26,6 +26,7 @@ function StockPredictionSection() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [cachedResults, setCachedResults] = useState<CachedResults>({});
   const [sentimentAnalysis, setSentimentAnalysis] = useState<any>(null);
+  const [sentimentRequested, setSentimentRequested] = useState<boolean>(false); // New state
 
   useEffect(() => {
     axios
@@ -35,6 +36,11 @@ function StockPredictionSection() {
       })
       .catch((err) => setError("Failed to load tickers"));
   }, []);
+
+  useEffect(() => {
+    setSentimentAnalysis(null);
+    setSentimentRequested(false); // Reset request state when ticker changes
+  }, [selectedTicker]);
 
   useEffect(() => {
     setResult(cachedResults[selectedTicker] || null);
@@ -68,13 +74,18 @@ function StockPredictionSection() {
   const handleGetSentimentAnalysis = async () => {
     if (!selectedTicker) return;
 
+    setSentimentRequested(true); // Mark that sentiment analysis has been requested
+
     try {
       const response = await axios.post(
         `${process.env.REACT_APP_API_URL}/api/get-sentiment-analysis/`,
         { ticker: selectedTicker }
       );
-
-      setSentimentAnalysis(response.data.sentiment_analysis);
+      if (!response.data.average_score) {
+        setSentimentAnalysis(null);
+      } else {
+        setSentimentAnalysis(response.data.average_score);
+      }
     } catch (err) {
       setError("Failed to get sentiment analysis");
     }
@@ -137,21 +148,28 @@ function StockPredictionSection() {
           </div>
         )}
 
-        {sentimentAnalysis && (
+        {sentimentRequested && (
           <div className="mb-4 bg-blue-50 p-3 rounded">
             <h3 className="font-bold text-blue-800">Sentiment Analysis:</h3>
-            <p className="text-blue-700">
-              Overall Sentiment: {sentimentAnalysis.overall_sentiment}
-            </p>
-            <p className="text-blue-700">
-              Positive: {sentimentAnalysis.positive}%
-            </p>
-            <p className="text-blue-700">
-              Neutral: {sentimentAnalysis.neutral}%
-            </p>
-            <p className="text-blue-700">
-              Negative: {sentimentAnalysis.negative}%
-            </p>
+            {sentimentAnalysis === null ? (
+              <p className="text-blue-700">
+                There is not sufficient information.
+              </p>
+            ) : (
+              <>
+                <p className="text-blue-700">
+                  Overall Sentiment: {sentimentAnalysis.toFixed(2)}
+                </p>
+                <p className="text-blue-700">
+                  Interpretation:{" "}
+                  {sentimentAnalysis > 0.25
+                    ? "Positive"
+                    : sentimentAnalysis < -0.25
+                    ? "Negative"
+                    : "Neutral"}
+                </p>
+              </>
+            )}
           </div>
         )}
 
