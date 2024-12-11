@@ -152,6 +152,8 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_ALL_ORIGINS = True  # Only for development
 
+NEWS_API_KEY="af4db6bbbcf84b8c8974b38dea460ffb"
+
 # Add logging configuration
 LOGGING = {
     'version': 1,
