@@ -1,23 +1,29 @@
 # main-project-team61
-# Tradient
+# Tradient -- About Us
 
 
 
-### VENV & Installing packages
+#Technical Architecture
 
-# Create a virtual environment
+
+
+
+
+#Project Set up
+
+### Create a virtual environment
 ```
 python3.11 -m venv .venv
 ```
-## You may need to install that version of python
+### You may need to install that version of python
 ```
 brew install python@3.11
 ```
-# Activate on macOS and Linux:
+### Activate on macOS and Linux:
 ```
 source .venv/bin/activate
 ```
-# Install dependencies
+### Install dependencies
 ```
 pip install -r requirements.txt
 ```
@@ -28,6 +34,8 @@ pip install -r requirements.txt
 cd frontend
 npm install
 ```
+
+# Our Roles
 
 ### Start the Django server (not needed rn)
 ```
