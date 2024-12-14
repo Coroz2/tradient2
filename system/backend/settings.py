@@ -14,6 +14,7 @@ from pathlib import Path
 import sys
 import os
 from dotenv import load_dotenv
+from uuid import uuid4
 
 load_dotenv()
 
@@ -86,7 +87,7 @@ WSGI_APPLICATION = "backend.wsgi.application"
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME'),
+        'NAME': os.getenv('DB_NAME') if 'test' not in sys.argv else f"{uuid4().hex}",
         'USER': os.getenv('DB_USER'),
         'PASSWORD': os.getenv('DB_PASSWORD'),
         'HOST': os.getenv('DB_HOST'),

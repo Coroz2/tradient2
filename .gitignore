@@ -17,3 +17,5 @@ db.sqlite3-journal
 
 # ENV Secrets
 .env
+
+my_env
