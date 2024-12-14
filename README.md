@@ -40,4 +40,20 @@ npm install
 python manage.py runserver 8080
 ```
 
+
+# Run Testing
+### Testing URLS Deployment
+```
+python manage.py test system.tests.test_urls
+```
+### Testing Database Connection
+```
+python manage.py test system.tests.test_supabase_client
+```
+### Testing Models
+```
+python manage.py test system.tests.test_views
+```
+
+
 # Our Roles
