@@ -29,3 +29,28 @@ Django==4.2.16
 psycopg2-binary==2.9.10
 supabase==2.9.1
 python-dotenv==1.0.1
+
+# Testing
+pytest==8.1.1
+pytest-django==4.8.0
+pytest-cov==4.1.0
+
+# API and Web
+django-cors-headers==4.3.1
+djangorestframework==3.14.0
+requests==2.31.0
+
+# News API
+newsapi-python==0.2.7
+
+# Sentiment Analysis
+textblob==0.17.1
+nltk==3.8.1
+
+# Logging and Environment
+python-dotenv==1.0.1
+python-logging==0.4.9.6
+
+# Development Tools
+black==24.2.0
+pylint==3.1.0
