@@ -3,13 +3,13 @@
 
 
 
-#Technical Architecture
+# Technical Architecture
 
 
 
 
 
-#Project Set up
+# Project Set up
 
 ### Create a virtual environment
 ```
@@ -35,9 +35,9 @@ cd frontend
 npm install
 ```
 
-# Our Roles
-
 ### Start the Django server (not needed rn)
 ```
 python manage.py runserver 8080
 ```
+
+# Our Roles
