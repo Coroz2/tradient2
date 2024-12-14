@@ -180,3 +180,5 @@ LOGGING = {
         },
     },
 }
+
+TEST_RUNNER = 'tests.runners.CustomTestRunner'
